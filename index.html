@@ -203,6 +203,12 @@
             <p style="font-size: 0.75rem; color: var(--text-muted);">
               Mã nhận diện Client: <strong id="myClientId" style="color: var(--accent-blue);">--</strong>
             </p>
+            <label for="roomLink" style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.75rem;">Link mời vào phòng này:</label>
+            <input id="roomLink" type="text" readonly aria-label="Link mời vào phòng" style="width: 100%; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: #0f172a; color: var(--text-main);">
+            <button class="btn" onclick="copyRoomLink()">Sao chép link mời</button>
+            <p style="font-size: 0.75rem; color: var(--accent-amber); margin-top: 0.5rem;">
+              Ai có link đều có thể tham gia. Broker công cộng không đảm bảo quyền riêng tư.
+            </p>
           </div>
 
           <div class="card">
@@ -483,8 +489,23 @@
     const myId = 'Client_' + Math.floor(Math.random() * 9000 + 1000);
     document.getElementById('myClientId').textContent = myId;
 
-    const topicName = "netprog/class/whiteboard/room_master";
-    const presenceTopic = "netprog/class/whiteboard/presence";
+    const roomParams = new URLSearchParams(window.location.hash.slice(1));
+    let roomId = roomParams.get('room');
+    if (!roomId || !/^[a-f0-9]{32}$/.test(roomId)) {
+      const randomBytes = new Uint8Array(16);
+      crypto.getRandomValues(randomBytes);
+      roomId = Array.from(randomBytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      roomParams.set('room', roomId);
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${roomParams.toString()}`);
+    }
+
+    const roomLink = new URL(window.location.href);
+    roomLink.hash = new URLSearchParams({ room: roomId }).toString();
+    document.getElementById('roomLink').value = roomLink.href;
+
+    const roomTopicPrefix = `netprog/class/whiteboard/${roomId}`;
+    const topicName = `${roomTopicPrefix}/drawing`;
+    const presenceTopic = `${roomTopicPrefix}/presence`;
 
     const activeClients = new Map();
     activeClients.set(myId, { id: myId, status: 'Đang hoạt động', lastSeen: Date.now() });
@@ -497,6 +518,19 @@
       line.innerHTML = `[${time}] ${msg}`;
       logs.appendChild(line);
       logs.scrollTop = logs.scrollHeight;
+    }
+
+    async function copyRoomLink() {
+      const input = document.getElementById('roomLink');
+      try {
+        await navigator.clipboard.writeText(input.value);
+        logNet('Đã sao chép link mời.');
+      } catch (error) {
+        console.error('Không thể sao chép link mời:', error);
+        input.focus();
+        input.select();
+        logNet('Không thể sao chép tự động. Hãy sao chép link đang được chọn.');
+      }
     }
 
     function updateClientListUI() {
